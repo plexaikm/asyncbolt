@@ -105,8 +105,12 @@ class ServerSession(protocol.BoltServerProtocol):
     def on_discard_all(self):
         self.restart_task_queue()
 
-    def on_init(self, auth_token):
-        self.verify_auth_token(auth_token)
+    def on_hello(self, metadata):
+        if metadata["scheme"] == "basic":
+            self.verify_auth_basic(metadata["principal"], metadata["credentials"])
+        else:
+            raise NotImplementedError("""Server received authentication scheme {}
+                                         Only basic authentication scheme is supported""".format(metadata["scheme"]))
 
     def on_pull_all(self):
         waiter = self.waiters_popleft()
@@ -129,7 +133,7 @@ class ServerSession(protocol.BoltServerProtocol):
         raise NotImplementedError("""Server received run message {}
                                      Inheriting classes must implement `run`""".format(data))
 
-    def verify_auth_token(self, auth_token):
+    def verify_auth_basic(self, principal, credentials):
         """Inheriting server protocol may implement this method"""
 
 

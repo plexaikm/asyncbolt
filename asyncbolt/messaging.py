@@ -13,8 +13,7 @@ from asyncbolt.exception import ProtocolError
 zero_arg_message = collections.namedtuple('ZeroArgMsg', ['signature'])
 
 # Client messages
-init = collections.namedtuple('Init', ['signature', 'user_agent', 'auth_token'])
-hello = collections.namedtuple('Hello', ['signature', 'user_agent', 'scheme', 'principal', 'credentials'])
+hello = collections.namedtuple('Hello', ['signature', 'metadata'])
 run = collections.namedtuple('Run', ['signature', 'statement', 'parameters'])
 
 # Server messages
@@ -37,7 +36,8 @@ V2 = struct.pack('>I', 0x02)
 V3 = struct.pack('>I', 0x03)
 MANIFEST_V1 = struct.pack('>I', 0x01FF)
 MANIFEST_LEN_1 = struct.pack('>B', 0x01)
-MANIFEST_V50_V50 = struct.pack('>II', 0x0005, 0x0005)
+MANIFEST_RANGE_V50_V50 = struct.pack('>II', 0x0005, 0x0005)
+V50 = struct.pack('>I', 0x0005)
 MANIFEST_NO_CAPABILITIES= struct.pack('>B', 0x00)
 NULL_V = struct.pack('>I', 0x00)
 
@@ -476,7 +476,7 @@ SERIALIZERS = {
 
 
 STRUCTURE_SIGNATURE_MAP = {
-    Message.HELLO: (hello, 4),
+    Message.HELLO: (hello, 1),
     Message.RECORD: (detail, 1),
     Message.FAILURE: (summary, 1),
     Message.SUCCESS: (summary, 1),

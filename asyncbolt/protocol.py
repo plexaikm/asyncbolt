@@ -32,6 +32,7 @@ class ServerProtocolState(IntEnum):
 class BoltProtocol(asyncio.Protocol):
 
     PROTOCOL_VERSION,  = messaging.unpack_v(messaging.MANIFEST_V1)
+    FINAL_VERSION, = messaging.unpack_v(messaging.V50)
     # PROTOCOL_VERSION, = messaging.unpack_v(messaging.V3)
 
     def __init__(self, loop):
@@ -101,30 +102,29 @@ class BoltServerProtocol(BoltProtocol):
         try:
             data_view = memoryview(data)
             if self.handshake_state == HandshakeProtocolState.PROTOCOL_UNINITIALIZED:
-                log_debug('Handshake client hello received {}'.format(data_view.hex()))
+                log_debug('Handshake - client data received {}'.format(data_view.hex()))
                 magic = data_view[:4]
                 if not magic == messaging.MAGIC:
                     raise ProtocolError('Incorrect magic byte sequence')
                 v1, v2, v3, v4 = messaging.unpack_4v(data_view[4:])
-                log_debug('Client requesting protocols: {} {} {} {}'.format(v1, v2, v3, v4))
-                # Only support MANIFEST V1 for and version 5.8
+                # Only support MANIFEST V1 for and version 5.0
                 if not v1 == self.PROTOCOL_VERSION:
                     raise ProtocolError('Invalid protocol version')
-                log_debug('Using protocol version: {}'.format(v1))
+                log_debug('Handshake - server Using protocol Manifest v1 for v5.0')
                 self.transport_write(messaging.MANIFEST_V1)
                 self.transport_write(messaging.MANIFEST_LEN_1)
-                self.transport_write(messaging.MANIFEST_V50_V50)
+                self.transport_write(messaging.MANIFEST_RANGE_V50_V50)
                 self.transport_write(messaging.MANIFEST_NO_CAPABILITIES)
+                log_debug('Handshake - server capabilities sent {}'.format(messaging.MANIFEST_NO_CAPABILITIES.hex()))
                 self.handshake_state = HandshakeProtocolState.PROTOCOL_VERSION_NEGOTIATE
-                # self.transport_write(messaging.V3)
-                # self.handshake_state = HandshakeProtocolState.PROTOCOL_DONE
             elif self.handshake_state == HandshakeProtocolState.PROTOCOL_VERSION_NEGOTIATE:
-                log_debug('Handshake client version received {}'.format(data_view.hex()))
+                log_debug('Handshake - client version received {}'.format(data_view.hex()))
                 vc, = messaging.unpack_v(data_view)
-                log_debug('Client requesting version: {}'.format(vc))
+                if not vc == self.FINAL_VERSION:
+                    raise ProtocolError('Unsupported version requested')
                 self.handshake_state = HandshakeProtocolState.PROTOCOL_CAPABILITIES_NEGOTIATE
             elif self.handshake_state == HandshakeProtocolState.PROTOCOL_CAPABILITIES_NEGOTIATE:
-                log_debug('Handshake client capabilities received {}'.format(data_view.hex()))
+                log_debug('Handshake - client capabilities received {}'.format(data_view.hex()))
                 if data != messaging.MANIFEST_NO_CAPABILITIES:
                     raise ProtocolError('Unsupported capabilities requested')
                 self.handshake_state = HandshakeProtocolState.PROTOCOL_DONE
@@ -135,7 +135,7 @@ class BoltServerProtocol(BoltProtocol):
         """Inheriting server protocol should implement this method"""
         return {"server": "AsyncBolt/1.0"}
 
-    def on_init(self, auth_token):
+    def on_hello(self, metadata):
         """Inheriting server protocol should implement this method"""
 
     # Hooks for custom behavior in inheriting classes
@@ -194,13 +194,14 @@ class BoltServerProtocol(BoltProtocol):
                     self.ignored({})
                     self.flush()
             elif self.state == ServerProtocolState.PROTOCOL_UNINITIALIZED:
-                if data.signature == messaging.Message.INIT:
-                    self.on_init(data.auth_token)
+                if data.signature == messaging.Message.HELLO:
+                    log_debug("Server session initializing with metadata '{}'".format(data.metadata))
+                    self.on_hello(data.metadata)
                     self.state = ServerProtocolState.PROTOCOL_READY
-                    log_debug("Server session initialized with auth token '{}'".format(data.auth_token))
                     metadata = self.get_server_metadata()
                     self.success(metadata)
                     self.flush()
+                    log_debug("Server session initialized")
                 else:
                     self.state = ServerProtocolState.PROTOCOL_FAILED
                     self.failure({})
