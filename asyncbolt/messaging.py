@@ -13,7 +13,8 @@ from asyncbolt.exception import ProtocolError
 zero_arg_message = collections.namedtuple('ZeroArgMsg', ['signature'])
 
 # Client messages
-init = collections.namedtuple('Init', ['signature', 'client_name', 'auth_token'])
+init = collections.namedtuple('Init', ['signature', 'user_agent', 'auth_token'])
+hello = collections.namedtuple('Hello', ['signature', 'user_agent', 'scheme', 'principal', 'credentials'])
 run = collections.namedtuple('Run', ['signature', 'statement', 'parameters'])
 
 # Server messages
@@ -32,6 +33,12 @@ unbound_relationship = collections.namedtuple(
 # constants
 MAGIC = struct.pack('>BBBB', 0x60, 0x60, 0xB0, 0x17)
 V1 = struct.pack('>I', 0x01)
+V2 = struct.pack('>I', 0x02)
+V3 = struct.pack('>I', 0x03)
+MANIFEST_V1 = struct.pack('>I', 0x01FF)
+MANIFEST_LEN_1 = struct.pack('>B', 0x01)
+MANIFEST_V50_V50 = struct.pack('>II', 0x0005, 0x0005)
+MANIFEST_NO_CAPABILITIES= struct.pack('>B', 0x00)
 NULL_V = struct.pack('>I', 0x00)
 
 # deserializers
@@ -161,7 +168,7 @@ class Marker(IntEnum):
 
 # Structure enumerations
 class Message(IntEnum):
-    INIT = 0x01
+    HELLO = 0x01
     RUN = 0x10
     DISCARD_ALL = 0x2F
     PULL_ALL = 0x3F
@@ -469,7 +476,7 @@ SERIALIZERS = {
 
 
 STRUCTURE_SIGNATURE_MAP = {
-    Message.INIT: (init, 2),
+    Message.HELLO: (hello, 4),
     Message.RECORD: (detail, 1),
     Message.FAILURE: (summary, 1),
     Message.SUCCESS: (summary, 1),

@@ -14,6 +14,12 @@ log_warning = logger.warning
 log_error = logger.error
 
 
+class HandshakeProtocolState(IntEnum):
+    PROTOCOL_UNINITIALIZED = 0
+    PROTOCOL_VERSION_NEGOTIATE = 1
+    PROTOCOL_CAPABILITIES_NEGOTIATE = 2
+    PROTOCOL_DONE = 3
+
 class ServerProtocolState(IntEnum):
     PROTOCOL_UNINITIALIZED = 0
     PROTOCOL_READY = 1
@@ -25,7 +31,8 @@ class ServerProtocolState(IntEnum):
 
 class BoltProtocol(asyncio.Protocol):
 
-    PROTOCOL_VERSION = 0x01
+    PROTOCOL_VERSION,  = messaging.unpack_v(messaging.MANIFEST_V1)
+    # PROTOCOL_VERSION, = messaging.unpack_v(messaging.V3)
 
     def __init__(self, loop):
         self.loop = loop
@@ -48,6 +55,7 @@ class BoltProtocol(asyncio.Protocol):
         self.transport_write = self.transport.write
 
     def data_received(self, data):
+        log_debug('Data received {}'.format(data.hex()))
         self.parser.feed_data(data)
         log_debug('Data received:\n{}\n'.format(data))
         self.handle_incoming()
@@ -68,7 +76,7 @@ class BoltServerProtocol(BoltProtocol):
     def __init__(self, loop, *, server=None):
         super().__init__(loop)
         self.server = server
-        self.handshake_done = False
+        self.handshake_state = HandshakeProtocolState.PROTOCOL_UNINITIALIZED
         self.state = ServerProtocolState.PROTOCOL_UNINITIALIZED
 
     def close(self):
@@ -81,14 +89,8 @@ class BoltServerProtocol(BoltProtocol):
         self.close()
 
     def data_received(self, data):
-        if not self.handshake_done:
-            data_view = memoryview(data)
-            magic = data_view[:4]
-            if not magic == messaging.MAGIC:
-                raise ProtocolError('Incorrect magic byte sequence')
-            log_debug('Handshake received')
-            self.check_protocol(data_view[4:])
-            self.handshake_done = True
+        if not self.handshake_state == HandshakeProtocolState.PROTOCOL_DONE:
+            self.check_protocol(data)
         else:
             super().data_received(data)
 
@@ -97,13 +99,35 @@ class BoltServerProtocol(BoltProtocol):
         """Verify requested protocol against supported versions"""
         # TODO handle future versions
         try:
-            v1, v2, v3, v4 = messaging.unpack_4v(data)
-            log_debug('Client requesting protocol: {}'.format(v1))
-            # Only support V1 Bolt
-            if not v1 == self.PROTOCOL_VERSION:
-                raise ProtocolError('Invalid protocol version')
-            log_debug('Using protocol version: {}'.format(v1))
-            self.transport_write(messaging.V1)
+            data_view = memoryview(data)
+            if self.handshake_state == HandshakeProtocolState.PROTOCOL_UNINITIALIZED:
+                log_debug('Handshake client hello received {}'.format(data_view.hex()))
+                magic = data_view[:4]
+                if not magic == messaging.MAGIC:
+                    raise ProtocolError('Incorrect magic byte sequence')
+                v1, v2, v3, v4 = messaging.unpack_4v(data_view[4:])
+                log_debug('Client requesting protocols: {} {} {} {}'.format(v1, v2, v3, v4))
+                # Only support MANIFEST V1 for and version 5.8
+                if not v1 == self.PROTOCOL_VERSION:
+                    raise ProtocolError('Invalid protocol version')
+                log_debug('Using protocol version: {}'.format(v1))
+                self.transport_write(messaging.MANIFEST_V1)
+                self.transport_write(messaging.MANIFEST_LEN_1)
+                self.transport_write(messaging.MANIFEST_V50_V50)
+                self.transport_write(messaging.MANIFEST_NO_CAPABILITIES)
+                self.handshake_state = HandshakeProtocolState.PROTOCOL_VERSION_NEGOTIATE
+                # self.transport_write(messaging.V3)
+                # self.handshake_state = HandshakeProtocolState.PROTOCOL_DONE
+            elif self.handshake_state == HandshakeProtocolState.PROTOCOL_VERSION_NEGOTIATE:
+                log_debug('Handshake client version received {}'.format(data_view.hex()))
+                vc, = messaging.unpack_v(data_view)
+                log_debug('Client requesting version: {}'.format(vc))
+                self.handshake_state = HandshakeProtocolState.PROTOCOL_CAPABILITIES_NEGOTIATE
+            elif self.handshake_state == HandshakeProtocolState.PROTOCOL_CAPABILITIES_NEGOTIATE:
+                log_debug('Handshake client capabilities received {}'.format(data_view.hex()))
+                if data != messaging.MANIFEST_NO_CAPABILITIES:
+                    raise ProtocolError('Unsupported capabilities requested')
+                self.handshake_state = HandshakeProtocolState.PROTOCOL_DONE
         except Exception as e:
             raise HandshakeError from e
 
