@@ -104,6 +104,7 @@ class ServerSession(protocol.BoltServerProtocol):
         self.restart_task_queue()
 
     def on_discard_all(self, extra):
+        log_debug("Server received DISCARD {}".format(extra))
         self.restart_task_queue()
 
     def get_server_metadata(self):
@@ -130,6 +131,7 @@ class ServerSession(protocol.BoltServerProtocol):
         log_debug("Server received ROLLBACK")
 
     def on_pull_all(self, extra):
+        log_debug("Server received PULL {}".format(extra))
         waiter = self.waiters_popleft()
         waiter.set_result(True)
 
@@ -144,12 +146,12 @@ class ServerSession(protocol.BoltServerProtocol):
         log_debug("Server received RUN {}, {}, {}".format(statement, parameters, extra))
         future = asyncio.Future(loop=self.loop)
         self.waiters_append(future)
-        self.task_queue.put_nowait((self.run(statement, parameters), future))
+        self.task_queue.put_nowait((self.run(statement, parameters, extra), future))
 
-    async def run(self, statement, parameters):
+    async def run(self, statement, parameters, extra):
         """Inheriting server protocol must implement this method."""
-        raise NotImplementedError("""Server received run message {} {}
-                                     Inheriting classes must implement `run`""".format(statement, parameters))
+        raise NotImplementedError("""Server received run message {} {} {}
+                                     Inheriting classes must implement `run`""".format(statement, parameters, extra))
 
     def verify_auth_basic(self, principal, credentials):
         """Inheriting server protocol may implement this method"""
