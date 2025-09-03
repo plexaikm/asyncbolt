@@ -1,6 +1,7 @@
 import asyncio
 import collections
 import logging
+import uuid
 
 from asyncbolt import protocol
 
@@ -102,17 +103,33 @@ class ServerSession(protocol.BoltServerProtocol):
     def on_ack_failure(self):
         self.restart_task_queue()
 
-    def on_discard_all(self):
+    def on_discard_all(self, extra):
         self.restart_task_queue()
 
-    def on_hello(self, metadata):
-        if metadata["scheme"] == "basic":
-            self.verify_auth_basic(metadata["principal"], metadata["credentials"])
+    def get_server_metadata(self):
+        return {"server": "Neo4j/compatible - AsyncBolt/5.0", "connection_id": "bolt-" + str(uuid.uuid1())}
+
+    def on_hello(self, extra):
+        log_debug("Server session initializing with extra '{}'".format(extra))
+        if extra["scheme"] == "basic":
+            self.verify_auth_basic(extra["principal"], extra["credentials"])
         else:
             raise NotImplementedError("""Server received authentication scheme {}
-                                         Only basic authentication scheme is supported""".format(metadata["scheme"]))
+                                         Only basic authentication scheme is supported""".format(extra["scheme"]))
 
-    def on_pull_all(self):
+        log_debug("Server session initialized")
+
+    def on_begin(self, extra):
+        log_debug("Server received BEGIN {}".format(extra))
+
+    def on_commit(self) -> dict:
+        log_debug("Server received COMMIT")
+        return {"bookmark": uuid.uuid1()}
+
+    def on_rollback(self):
+        log_debug("Server received ROLLBACK")
+
+    def on_pull_all(self, extra):
         waiter = self.waiters_popleft()
         waiter.set_result(True)
 
@@ -123,15 +140,16 @@ class ServerSession(protocol.BoltServerProtocol):
             self.ignored({})
         self.restart_task_queue()
 
-    def on_run(self, statement, parameters):
+    def on_run(self, statement, parameters, extra):
+        log_debug("Server received RUN {}, {}, {}".format(statement, parameters, extra))
         future = asyncio.Future(loop=self.loop)
         self.waiters_append(future)
         self.task_queue.put_nowait((self.run(statement, parameters), future))
 
     async def run(self, statement, parameters):
         """Inheriting server protocol must implement this method."""
-        raise NotImplementedError("""Server received run message {}
-                                     Inheriting classes must implement `run`""".format(data))
+        raise NotImplementedError("""Server received run message {} {}
+                                     Inheriting classes must implement `run`""".format(statement, parameters))
 
     def verify_auth_basic(self, principal, credentials):
         """Inheriting server protocol may implement this method"""

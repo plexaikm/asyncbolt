@@ -7,3 +7,11 @@ password = "password"
 driver = GraphDatabase.driver(uri, auth=(username, password))
 
 driver.verify_connectivity()
+
+x = driver.execute_query("""
+    RETURN 1
+    """
+)
+
+print(x)
+

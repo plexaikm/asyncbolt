@@ -13,8 +13,15 @@ from asyncbolt.exception import ProtocolError
 zero_arg_message = collections.namedtuple('ZeroArgMsg', ['signature'])
 
 # Client messages
-hello = collections.namedtuple('Hello', ['signature', 'metadata'])
-run = collections.namedtuple('Run', ['signature', 'statement', 'parameters'])
+hello = collections.namedtuple('Hello', ['signature', 'extra'])
+run = collections.namedtuple('Run', ['signature', 'statement', 'parameters', 'extra'])
+pull = collections.namedtuple('Pull', ['signature', 'extra'])
+discard = collections.namedtuple('Discard', ['signature', 'extra'])
+
+# Transaction managementg messages
+begin = collections.namedtuple('Begin', ['signature', 'extra'])
+commit = collections.namedtuple('Commit', ['signature'])
+rollback = collections.namedtuple('Rollback', ['signature'])
 
 # Server messages
 detail = collections.namedtuple('Detail', ['signature', 'fields'])
@@ -170,6 +177,9 @@ class Marker(IntEnum):
 class Message(IntEnum):
     HELLO = 0x01
     RUN = 0x10
+    BEGIN = 0x11
+    COMMIT = 0x12
+    ROLLBACK = 0x13
     DISCARD_ALL = 0x2F
     PULL_ALL = 0x3F
     ACK_FAILURE = 0x0E
@@ -350,6 +360,8 @@ def unpack_structure(marker, buf):
     high_nib = marker & 0xF0
     if high_nib == Structure.TINY_MIN:
         size = marker & 0x0F
+    elif high_nib == Map.TINY_MIN:
+        size = marker & 0x0F
     elif marker == Structure.STRUCT_8:
         size, = unpack_uint_8(buf.read(1))
     elif marker == Structure.STRUCT_16:
@@ -481,7 +493,12 @@ STRUCTURE_SIGNATURE_MAP = {
     Message.FAILURE: (summary, 1),
     Message.SUCCESS: (summary, 1),
     Message.IGNORED: (summary, 1),
-    Message.RUN: (run, 2),
+    Message.RUN: (run, 3),
+    Message.PULL_ALL: (pull, 1),
+    Message.DISCARD_ALL: (discard, 1),
+    Message.BEGIN: (begin, 1),
+    Message.COMMIT: (commit, 0),
+    Message.ROLLBACK: (rollback, 0),
     GraphStructure.NODE: (node, 3),
     GraphStructure.RELATIONSHIP: (relationship, 5),
     GraphStructure.PATH: (path, 3),

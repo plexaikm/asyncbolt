@@ -20,6 +20,7 @@ class HandshakeProtocolState(IntEnum):
     PROTOCOL_CAPABILITIES_NEGOTIATE = 2
     PROTOCOL_DONE = 3
 
+
 class ServerProtocolState(IntEnum):
     PROTOCOL_UNINITIALIZED = 0
     PROTOCOL_READY = 1
@@ -56,7 +57,7 @@ class BoltProtocol(asyncio.Protocol):
         self.transport_write = self.transport.write
 
     def data_received(self, data):
-        log_debug('Data received {}'.format(data.hex()))
+        # log_debug('Data received {}'.format(data.hex()))
         self.parser.feed_data(data)
         log_debug('Data received:\n{}\n'.format(data))
         self.handle_incoming()
@@ -102,7 +103,7 @@ class BoltServerProtocol(BoltProtocol):
         try:
             data_view = memoryview(data)
             if self.handshake_state == HandshakeProtocolState.PROTOCOL_UNINITIALIZED:
-                log_debug('Handshake - client data received {}'.format(data_view.hex()))
+                # log_debug('Handshake - client data received {}'.format(data_view.hex()))
                 magic = data_view[:4]
                 if not magic == messaging.MAGIC:
                     raise ProtocolError('Incorrect magic byte sequence')
@@ -110,48 +111,58 @@ class BoltServerProtocol(BoltProtocol):
                 # Only support MANIFEST V1 for and version 5.0
                 if not v1 == self.PROTOCOL_VERSION:
                     raise ProtocolError('Invalid protocol version')
-                log_debug('Handshake - server Using protocol Manifest v1 for v5.0')
-                self.transport_write(messaging.MANIFEST_V1)
-                self.transport_write(messaging.MANIFEST_LEN_1)
-                self.transport_write(messaging.MANIFEST_RANGE_V50_V50)
-                self.transport_write(messaging.MANIFEST_NO_CAPABILITIES)
-                log_debug('Handshake - server capabilities sent {}'.format(messaging.MANIFEST_NO_CAPABILITIES.hex()))
-                self.handshake_state = HandshakeProtocolState.PROTOCOL_VERSION_NEGOTIATE
-            elif self.handshake_state == HandshakeProtocolState.PROTOCOL_VERSION_NEGOTIATE:
-                log_debug('Handshake - client version received {}'.format(data_view.hex()))
-                vc, = messaging.unpack_v(data_view)
-                if not vc == self.FINAL_VERSION:
-                    raise ProtocolError('Unsupported version requested')
-                self.handshake_state = HandshakeProtocolState.PROTOCOL_CAPABILITIES_NEGOTIATE
-            elif self.handshake_state == HandshakeProtocolState.PROTOCOL_CAPABILITIES_NEGOTIATE:
-                log_debug('Handshake - client capabilities received {}'.format(data_view.hex()))
-                if data != messaging.MANIFEST_NO_CAPABILITIES:
-                    raise ProtocolError('Unsupported capabilities requested')
+                # log_debug('Handshake - server Using protocol v5.0')
+                self.transport_write(messaging.V50)
+                # log_debug('Handshake - server Using protocol Manifest v1 for v5.0')
+                # self.transport_write(messaging.MANIFEST_V1)
+                # self.transport_write(messaging.MANIFEST_LEN_1)
+                # self.transport_write(messaging.MANIFEST_RANGE_V50_V50)
+                # self.transport_write(messaging.MANIFEST_NO_CAPABILITIES)
+                # log_debug('Handshake - server capabilities sent {}'.format(messaging.MANIFEST_NO_CAPABILITIES.hex()))
+                # self.handshake_state = HandshakeProtocolState.PROTOCOL_VERSION_NEGOTIATE
+            # elif self.handshake_state == HandshakeProtocolState.PROTOCOL_VERSION_NEGOTIATE:
+            #     log_debug('Handshake - client version received {}'.format(data_view.hex()))
+            #     vc, = messaging.unpack_v(data_view)
+            #     if not vc == self.FINAL_VERSION:
+            #         raise ProtocolError('Unsupported version requested')
+            #     self.handshake_state = HandshakeProtocolState.PROTOCOL_CAPABILITIES_NEGOTIATE
+            # elif self.handshake_state == HandshakeProtocolState.PROTOCOL_CAPABILITIES_NEGOTIATE:
+            #     log_debug('Handshake - client capabilities received {}'.format(data_view.hex()))
+            #     if data != messaging.MANIFEST_NO_CAPABILITIES:
+            #         raise ProtocolError('Unsupported capabilities requested')
                 self.handshake_state = HandshakeProtocolState.PROTOCOL_DONE
         except Exception as e:
             raise HandshakeError from e
 
     def get_server_metadata(self):
         """Inheriting server protocol should implement this method"""
-        return {"server": "AsyncBolt/1.0"}
 
-    def on_hello(self, metadata):
+    def on_hello(self, extra):
         """Inheriting server protocol should implement this method"""
 
     # Hooks for custom behavior in inheriting classes
     def on_ack_failure(self):
         """Called when server receives ACK_FAILURE message"""
 
-    def on_discard_all(self):
+    def on_discard_all(self, extra):
         """Called when server receives DISCARD_ALL message"""
 
-    def on_pull_all(self):
+    def on_pull_all(self, extra):
         """Required! Send completed tasks to client!"""
         raise NotImplementedError
 
-    def on_run(self, statement, parameters):
+    def on_run(self, statement, parameters, extra):
         """Required! Run task received from client"""
         raise NotImplementedError
+
+    def on_begin(self, extra):
+        """Inheriting server protocol should implement this method"""
+
+    def on_commit(self) -> dict:
+        """Inheriting server protocol should implement this method"""
+
+    def on_rollback(self):
+        """Inheriting server protocol should implement this method"""
 
     def on_reset(self):
         """Called when server receives ACK_FAILURE message"""
@@ -162,7 +173,19 @@ class BoltServerProtocol(BoltProtocol):
             if self.state == ServerProtocolState.PROTOCOL_READY:
                 if data.signature == messaging.Message.RUN:
                     self.state = ServerProtocolState.PROTOCOL_RUNNING
-                    self.on_run(data.statement, data.parameters)
+                    self.on_run(data.statement, data.parameters, data.extra)
+                elif data.signature == messaging.Message.BEGIN:
+                    self.on_begin(data.extra)
+                    self.success({})
+                    self.flush()
+                elif data.signature == messaging.Message.COMMIT:
+                    extra = self.on_commit()
+                    self.success(extra)
+                    self.flush()
+                elif data.signature == messaging.Message.ROLLBACK:
+                    self.on_rollback()
+                    self.success({})
+                    self.flush()
                 elif data.signature == messaging.Message.RESET:
                     self.reset()
                 else:
@@ -172,10 +195,10 @@ class BoltServerProtocol(BoltProtocol):
             elif self.state == ServerProtocolState.PROTOCOL_RUNNING:
                 if data.signature == messaging.Message.PULL_ALL:
                     # Client ready to consume stream
-                    self.on_pull_all()
+                    self.on_pull_all(data.extra)
                     self.state = ServerProtocolState.PROTOCOL_READY
                 elif data.signature == messaging.Message.DISCARD_ALL:
-                    self.on_discard_all()
+                    self.on_discard_all(data.extra)
                     self.write_buffer = buffer.ChunkedWriteBuffer(8192)
                     self.state = ServerProtocolState.PROTOCOL_READY
                 else:
@@ -195,13 +218,11 @@ class BoltServerProtocol(BoltProtocol):
                     self.flush()
             elif self.state == ServerProtocolState.PROTOCOL_UNINITIALIZED:
                 if data.signature == messaging.Message.HELLO:
-                    log_debug("Server session initializing with metadata '{}'".format(data.metadata))
-                    self.on_hello(data.metadata)
+                    self.on_hello(data.extra)
                     self.state = ServerProtocolState.PROTOCOL_READY
                     metadata = self.get_server_metadata()
                     self.success(metadata)
                     self.flush()
-                    log_debug("Server session initialized")
                 else:
                     self.state = ServerProtocolState.PROTOCOL_FAILED
                     self.failure({})
@@ -224,10 +245,10 @@ class BoltServerProtocol(BoltProtocol):
 
     # Bolt message packing methods
     def record(self, fields):
-        messaging.serialize_message(messaging.Message.RECORD, buf=self.write_buffer, params=(fields, ))
+        messaging.serialize_message(messaging.Message.RECORD, buf=self.write_buffer, params=(fields,))
 
     def success(self, metadata):
-        messaging.serialize_message(messaging.Message.SUCCESS, buf=self.write_buffer, params=(metadata, ))
+        messaging.serialize_message(messaging.Message.SUCCESS, buf=self.write_buffer, params=(metadata,))
 
     def failure(self, metadata):
         messaging.serialize_message(messaging.Message.FAILURE, buf=self.write_buffer, params=(metadata,))
@@ -255,9 +276,9 @@ class BoltClientProtocol(BoltProtocol):
 
     def data_received(self, data):
         """
-        Called when client receives data. This method handles the connection handshake. All session specific information
-        (initialization, etc., is handled by the ClientSession object, which provides the main client API for
-        asyncbolt.
+        Called when client receives data. This method handles the connection handshake.
+        All session specific information (initialization, etc.), is handled by the ClientSession object,
+        which provides the main client API for asyncbolt.
         """
         if not self.handshake_waiter.done():
             try:
@@ -323,8 +344,8 @@ class BoltClientProtocol(BoltProtocol):
         self.waiter = asyncio.Future(loop=self.loop)
 
     # Bolt message packing methods
-    def init(self, client_name, auth_token):
-        messaging.serialize_message(messaging.Message.INIT, buf=self.write_buffer, params=(client_name, auth_token))
+    def hello(self, client_name, metadata):
+        messaging.serialize_message(messaging.Message.HELLO, buf=self.write_buffer, params=(client_name, metadata))
 
     def run(self, statement, parameters):
         messaging.serialize_message(messaging.Message.RUN, buf=self.write_buffer, params=(statement, parameters))

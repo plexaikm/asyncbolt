@@ -16,7 +16,7 @@ class EchoServerSession(asyncbolt.ServerSession):
 
 # The rest is pretty similar to asyncio...
 # Note that the first arg of create_server is a protocol class, not a factory
-# it will be called with any additional kwargs passed to to create_server
+# it will be called with any additional kwargs passed to create_server
 loop = asyncio.get_event_loop()
 coro = asyncbolt.create_server(EchoServerSession, loop=loop, host='localhost', port=7687, ssl=None)
 server = loop.run_until_complete(coro)
