@@ -8,10 +8,26 @@ driver = GraphDatabase.driver(uri, auth=(username, password))
 
 driver.verify_connectivity()
 
-result = driver.execute_query("""
-    RETURN 1
-    """
-)
 
-for record in result:
-    print(record)
+with driver.session() as session:
+    try:
+        result = session.run("""
+            RETURN 2
+            """
+        )
+
+        for record in result:
+            print(record)
+    except Exception as e:
+        print(e.message)
+
+    try:
+        result = session.run("""
+            RETURN 1
+            """
+        )
+
+        for record in result:
+            print(record)
+    except Exception as e:
+        print(e.message)
