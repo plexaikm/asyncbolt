@@ -4,12 +4,12 @@ from asyncbolt import messaging, exception
 
 
 @pytest.mark.asyncio
-async def test_handshake_init(client_server_pair):
+async def test_handshake_hello(client_server_pair):
     client, _ = client_server_pair
     await client.handshake_waiter
     assert client.handshake_waiter.done() is True
-    client_name, auth_token = client.get_init_params()
-    client.init(client_name, auth_token)
+    client_name, extra = client.get_init_params()
+    client.hello(client_name, extra)
     client.flush()
     success = await client.read()
     assert success.signature == messaging.Message.SUCCESS

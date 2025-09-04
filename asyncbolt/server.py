@@ -89,11 +89,14 @@ class ServerSession(protocol.BoltServerProtocol):
                     pass
                 self.flush()
             else:
-                self.success({'result_available_after': self.loop.time() - start_time})
-                self.record([fields])
+                # self.success({'result_available_after': self.loop.time() - start_time})
+                self.success({"t_first": 2, "fields": [["1"]], "qid": 0})
+                self.record([1])
 
                 await future  # Pull All is called, flush queue...
-                self.success({'result_consumed_after': self.loop.time() - start_time})
+                # self.success({'result_consumed_after': self.loop.time() - start_time})
+                self.success({"type": "r", "t_last": 1, "db": "neo4j"})
+
                 self.flush()
                 self.task_queue_handler = self.loop.create_task(self._run_task_queue())
                 log_debug("Packed fields '{}'".format(fields))
@@ -125,7 +128,7 @@ class ServerSession(protocol.BoltServerProtocol):
 
     def on_commit(self) -> dict:
         log_debug("Server received COMMIT")
-        return {"bookmark": uuid.uuid1()}
+        return {"bookmark": str(uuid.uuid1())}
 
     def on_rollback(self):
         log_debug("Server received ROLLBACK")

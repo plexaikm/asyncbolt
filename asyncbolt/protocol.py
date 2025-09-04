@@ -344,8 +344,8 @@ class BoltClientProtocol(BoltProtocol):
         self.waiter = asyncio.Future(loop=self.loop)
 
     # Bolt message packing methods
-    def hello(self, client_name, metadata):
-        messaging.serialize_message(messaging.Message.HELLO, buf=self.write_buffer, params=(client_name, metadata))
+    def hello(self, client_name, extra):
+        messaging.serialize_message(messaging.Message.HELLO, buf=self.write_buffer, params=(client_name, extra))
 
     def run(self, statement, parameters):
         messaging.serialize_message(messaging.Message.RUN, buf=self.write_buffer, params=(statement, parameters))
