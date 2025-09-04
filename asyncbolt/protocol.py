@@ -144,10 +144,10 @@ class BoltServerProtocol(BoltProtocol):
     def on_ack_failure(self):
         """Called when server receives ACK_FAILURE message"""
 
-    def on_discard_all(self, extra):
-        """Called when server receives DISCARD_ALL message"""
+    def on_discard(self, extra):
+        """Called when server receives DISCARD message"""
 
-    def on_pull_all(self, extra):
+    def on_pull(self, extra):
         """Required! Send completed tasks to client!"""
         raise NotImplementedError
 
@@ -193,12 +193,12 @@ class BoltServerProtocol(BoltProtocol):
                     self.failure({})
                     self.flush()
             elif self.state == ServerProtocolState.PROTOCOL_RUNNING:
-                if data.signature == messaging.Message.PULL_ALL:
+                if data.signature == messaging.Message.PULL:
                     # Client ready to consume stream
-                    self.on_pull_all(data.extra)
+                    self.on_pull(data.extra)
                     self.state = ServerProtocolState.PROTOCOL_READY
-                elif data.signature == messaging.Message.DISCARD_ALL:
-                    self.on_discard_all(data.extra)
+                elif data.signature == messaging.Message.DISCARD:
+                    self.on_discard(data.extra)
                     self.write_buffer = buffer.ChunkedWriteBuffer(8192)
                     self.state = ServerProtocolState.PROTOCOL_READY
                 else:
@@ -350,11 +350,11 @@ class BoltClientProtocol(BoltProtocol):
     def run(self, statement, parameters):
         messaging.serialize_message(messaging.Message.RUN, buf=self.write_buffer, params=(statement, parameters))
 
-    def discard_all(self):
-        messaging.serialize_message(messaging.Message.DISCARD_ALL, buf=self.write_buffer)
+    def discard(self, extra):
+        messaging.serialize_message(messaging.Message.DISCARD, buf=self.write_buffer, params=(extra,))
 
-    def pull_all(self):
-        messaging.serialize_message(messaging.Message.PULL_ALL, buf=self.write_buffer)
+    def pull(self, extra):
+        messaging.serialize_message(messaging.Message.PULL, buf=self.write_buffer, params=(extra,))
 
     def ack_failure(self):
         messaging.serialize_message(messaging.Message.ACK_FAILURE, buf=self.write_buffer)

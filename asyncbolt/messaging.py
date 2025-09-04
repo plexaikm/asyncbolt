@@ -180,8 +180,8 @@ class Message(IntEnum):
     BEGIN = 0x11
     COMMIT = 0x12
     ROLLBACK = 0x13
-    DISCARD_ALL = 0x2F
-    PULL_ALL = 0x3F
+    DISCARD = 0x2F
+    PULL = 0x3F
     ACK_FAILURE = 0x0E
     RESET = 0x0F
     RECORD = 0x71
@@ -494,8 +494,8 @@ STRUCTURE_SIGNATURE_MAP = {
     Message.SUCCESS: (summary, 1),
     Message.IGNORED: (summary, 1),
     Message.RUN: (run, 3),
-    Message.PULL_ALL: (pull, 1),
-    Message.DISCARD_ALL: (discard, 1),
+    Message.PULL: (pull, 1),
+    Message.DISCARD: (discard, 1),
     Message.BEGIN: (begin, 1),
     Message.COMMIT: (commit, 0),
     Message.ROLLBACK: (rollback, 0),

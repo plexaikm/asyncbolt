@@ -103,7 +103,7 @@ class ServerSession(protocol.BoltServerProtocol):
     def on_ack_failure(self):
         self.restart_task_queue()
 
-    def on_discard_all(self, extra):
+    def on_discard(self, extra):
         log_debug("Server received DISCARD {}".format(extra))
         self.restart_task_queue()
 
@@ -130,7 +130,7 @@ class ServerSession(protocol.BoltServerProtocol):
     def on_rollback(self):
         log_debug("Server received ROLLBACK")
 
-    def on_pull_all(self, extra):
+    def on_pull(self, extra):
         log_debug("Server received PULL {}".format(extra))
         waiter = self.waiters_popleft()
         waiter.set_result(True)

@@ -27,7 +27,7 @@ class DummyProtocol:
 
 class EchoServerSession(ServerSession):
 
-    async def run(self, statement, parameters):
+    async def run(self, statement, parameters, extra):
         if statement == 'fail':
             raise RuntimeError('Server received bad statement')
         return statement

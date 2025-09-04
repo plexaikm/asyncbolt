@@ -10,8 +10,8 @@ logging.basicConfig(level=logging.DEBUG, format=FORMAT)
 
 class EchoServerSession(asyncbolt.ServerSession):
     """This is a descendant of asyncio.Protocol/asyncbolt.BoltServerProtocol"""
-    def run(self, statement, parameters):
-        return {'statement': statement, 'parameters': parameters}
+    def run(self, statement, parameters, extra):
+        return {'statement': statement, 'parameters': parameters, 'extra': extra}
 
 
 # The rest is pretty similar to asyncio...

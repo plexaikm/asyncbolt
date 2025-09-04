@@ -146,15 +146,15 @@ class ClientSession:
     def pipeline(self, statement, parameters=None):
         """
         Pipeline requests to the Bolt server. Written to underlying protocol write buffer, but not processed until
-        ClientSession.pull_all or ClientSession.run is called.
+        ClientSession.pull or ClientSession.run is called.
         called
         """
         if self._inflight > self._max_inflight:
             raise BoltClientError('Exceeded max number of pipelined messages')
         self._protocol.run(statement, parameters)
         log_debug('Pipelining statement and params:\n{}\n{}\n'.format(statement, parameters))
-        self._protocol.pull_all()
-        log_debug('Pipelining PULL_ALL\n')
+        self._protocol.pull({})
+        log_debug('Pipelining PULL\n')
         self._inflight += 2
 
     async def reset(self):
