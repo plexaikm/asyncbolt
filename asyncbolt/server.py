@@ -4,6 +4,7 @@ import logging
 import uuid
 
 from asyncbolt import protocol
+from typing import Tuple
 
 
 logger = logging.getLogger(__name__)
@@ -77,9 +78,10 @@ class ServerSession(protocol.BoltServerProtocol):
                 fields = task
                 if asyncio.iscoroutine(fields):
                     fields = await fields
+                stats, fields, data = fields
             except Exception as e:
                 self.state = protocol.ServerProtocolState.PROTOCOL_FAILED
-                self.failure({})
+                self.failure({"code": "RUN Failed", "message": str(e)})
                 try:
                     # TODO should have a timeout here
                     # This is a bit weird
@@ -89,17 +91,16 @@ class ServerSession(protocol.BoltServerProtocol):
                     pass
                 self.flush()
             else:
-                # self.success({'result_available_after': self.loop.time() - start_time})
-                self.success({"t_first": 2, "fields": [["1"]], "qid": 0})
-                self.record([1])
+                self.success({"t_first": self.loop.time() - start_time, "fields": fields, "qid": 0})
+
+                log_debug("Packed data \n{}\n".format(data))
+                self.record(data)
 
                 await future  # Pull All is called, flush queue...
-                # self.success({'result_consumed_after': self.loop.time() - start_time})
-                self.success({"type": "r", "t_last": 1, "db": "neo4j"})
+                self.success({"type": "r", "t_last": self.loop.time() - start_time, "db": "neo4j", "stats": stats})
 
                 self.flush()
                 self.task_queue_handler = self.loop.create_task(self._run_task_queue())
-                log_debug("Packed fields '{}'".format(fields))
         except asyncio.CancelledError:
             pass
 
@@ -151,7 +152,7 @@ class ServerSession(protocol.BoltServerProtocol):
         self.waiters_append(future)
         self.task_queue.put_nowait((self.run(statement, parameters, extra), future))
 
-    async def run(self, statement, parameters, extra):
+    async def run(self, statement, parameters, extra) -> Tuple[dict, list, list]:
         """Inheriting server protocol must implement this method."""
         raise NotImplementedError("""Server received run message {} {} {}
                                      Inheriting classes must implement `run`""".format(statement, parameters, extra))

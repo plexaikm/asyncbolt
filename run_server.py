@@ -3,6 +3,8 @@ import logging
 
 import asyncbolt
 
+from typing import Tuple
+
 
 FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 logging.basicConfig(level=logging.DEBUG, format=FORMAT)
@@ -10,9 +12,11 @@ logging.basicConfig(level=logging.DEBUG, format=FORMAT)
 
 class EchoServerSession(asyncbolt.ServerSession):
     """This is a descendant of asyncio.Protocol/asyncbolt.BoltServerProtocol"""
-    def run(self, statement, parameters, extra):
-        # return {'statement': statement, 'parameters': parameters, 'extra': extra}
-        return []
+    async def run(self, statement, parameters, extra) -> Tuple[dict, list, list]:
+        if statement.strip() == "RETURN 1":
+            return {}, ["1"], [1]
+        else:
+            raise ValueError("Unsupported statement")
 
 
 # The rest is pretty similar to asyncio...

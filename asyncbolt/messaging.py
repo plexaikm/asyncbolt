@@ -18,7 +18,7 @@ run = collections.namedtuple('Run', ['signature', 'statement', 'parameters', 'ex
 pull = collections.namedtuple('Pull', ['signature', 'extra'])
 discard = collections.namedtuple('Discard', ['signature', 'extra'])
 
-# Transaction managementg messages
+# Transaction management messages
 begin = collections.namedtuple('Begin', ['signature', 'extra'])
 commit = collections.namedtuple('Commit', ['signature'])
 rollback = collections.namedtuple('Rollback', ['signature'])
